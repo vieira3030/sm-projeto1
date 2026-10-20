@@ -1,6 +1,10 @@
 // -- Variáveis globais para controlo de ecrãs e níveis
-let estado = 0; // 0: Início, 1: Calibração, 2: Jogo, 3: Vitória, 4: Game Over
+let estado = 0; // 0: Início, 1: Calibração, 2: Jogo, 3: Vitória, 4: Game Over, 5: Nível Concluído
 let nivelAtual = 1; // Nível 1 (3 covas), Nível 2 (5 covas), Nível 3 (7 covas)
+
+// -- Variáveis de tempo
+let tempoInicioJogo = 0;
+let tempoDecorridoSegundos = 0;
 
 // -- Variáveis do microfone e calibração
 let mic;
@@ -48,6 +52,8 @@ function draw() {
         ecraVitoria();
     } else if (estado === 4) {
         ecraGameOver();
+    } else if (estado === 5) {
+        ecraNivelConcluido();
     }
 
     desenharRodape(); // Textos obrigatórios no rodapé
@@ -94,12 +100,16 @@ function ecraCalibracao() {
     if (millis() - inicioCalibracao >= 3000) {
         let ruidoMedio = somaVolume / max(1, amostras);
         limiteChuva = ruidoMedio + 0.08;
+        tempoInicioJogo = millis(); // Guarda o momento inicial do temporizador
         estado = 2; // Avança para o ecrã de jogo
     }
 }
 
 function ecraJogo() {
     desenhaCenario();
+
+    // -- Atualiza a contagem de tempo do jogo em segundos
+    tempoDecorridoSegundos = floor((millis() - tempoInicioJogo) / 1000);
 
     let vol = mic.getLevel();
 
@@ -160,27 +170,60 @@ function ecraJogo() {
     desenharHUD();
 }
 
-function ecraVitoria() {
-    fill(0);
+// -- Ecrã intermédio entre níveis
+function ecraNivelConcluido() {
+    fill(0, 100, 0);
     textAlign(CENTER);
     textSize(32);
-    text("PARABÉNS! JOGO CONCLUÍDO", width / 2, height / 2 - 30);
-    textSize(22);
-    text("Pontuação Final: " + pontuacao, width / 2, height / 2 + 10);
+    text("NÍVEL " + nivelAtual + " CONCLUÍDO!", width / 2, height / 2 - 40);
+    
+    fill(0);
+    textSize(20);
+    text("Pontuação Atual: " + pontuacao + " pts", width / 2, height / 2);
+    text("Tempo acumulado: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    
+    fill(50);
     textSize(16);
-    text("Clica para jogar novamente", width / 2, height / 2 + 50);
+    text("Clica no ecrã para avançar para o Nível " + (nivelAtual + 1), width / 2, height / 2 + 75);
+}
+
+function ecraVitoria() {
+    fill(0, 128, 0);
+    textAlign(CENTER);
+    textSize(32);
+    text("PARABÉNS! JOGO CONCLUÍDO", width / 2, height / 2 - 40);
+    
+    fill(0);
+    textSize(22);
+    text("Pontuação Final: " + pontuacao + " pts", width / 2, height / 2);
+    text("Tempo Total: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    
+    textSize(16);
+    text("Clica para jogar novamente", width / 2, height / 2 + 75);
 }
 
 function ecraGameOver() {
     fill(200, 0, 0);
     textAlign(CENTER);
     textSize(36);
-    text("GAME OVER", width / 2, height / 2 - 30);
+    text("GAME OVER", width / 2, height / 2 - 40);
+    
     fill(0);
     textSize(20);
-    text("A tua reserva de água esgotou-se!", width / 2, height / 2 + 10);
+    text("A tua reserva de água esgotou-se!", width / 2, height / 2);
+    text("Tempo de jogo: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    
     textSize(16);
-    text("Clica para tentar novamente", width / 2, height / 2 + 50);
+    text("Clica para tentar novamente", width / 2, height / 2 + 75);
+}
+
+// -- Formata os segundos em formato MM:SS
+function formatarTempo(segundosTotais) {
+    let minutos = floor(segundosTotais / 60);
+    let segundos = segundosTotais % 60;
+    let minStr = minutos < 10 ? "0" + minutos : minutos;
+    let segStr = segundos < 10 ? "0" + segundos : segundos;
+    return minStr + ":" + segStr;
 }
 
 // -- Gerador de gotas recarregáveis caindo do céu
@@ -218,18 +261,15 @@ function atualizarGotasAgua() {
     }
 }
 
-// -- Gerador de obstáculos com escalamento progressivo de velocidade e frequência por nível
+// -- Gerador de obstáculos com escalamento por nível
 function gerarObstaculos() {
-    // Reduz o intervalo entre respawns (3s no Nível 1 -> 1.8s no Nível 2 -> 0.8s no Nível 3)
     let intervaloRespawn = map(nivelAtual, 1, 3, 3000, 800);
 
     if (millis() - tempoUltimoObstaculo > intervaloRespawn) {
-        // No nível 3, há 40% de probabilidade de surgirem 2 obstáculos em simultâneo
         let qtdObstaculos = (nivelAtual === 3 && random() < 0.4) ? 2 : 1;
 
         for (let k = 0; k < qtdObstaculos; k++) {
             let tipoObs = random(["passaro", "nuvemToxica"]);
-            // Velocidade aumenta significativamente por nível (N1: 2-3, N2: 4-5, N3: 6-7.5)
             let velBase = random(2, 3) + (nivelAtual - 1) * 2.2;
             let origens = ["direita", "esquerda", "topo"];
             let origem = random(origens);
@@ -245,7 +285,7 @@ function gerarObstaculos() {
                 oy = random(50, 220);
                 vx = velBase;
                 vy = random(-0.8, 0.8);
-            } else { // Origem topo
+            } else {
                 ox = random(100, width - 100);
                 oy = -30;
                 vx = random(-1.5, 1.5);
@@ -265,14 +305,14 @@ function gerarObstaculos() {
     }
 }
 
-// -- Movimento multidirecional, colisão e repelimento radial por vento
+// -- Movimento multidirecional, colisão e repelimento por vento
 function atualizarObstaculos() {
     for (let i = obstaculos.length - 1; i >= 0; i--) {
         let obs = obstaculos[i];
 
         if (estadoVento) {
             let angulo = atan2(obs.y - nuvemY, obs.x - nuvemX);
-            obs.x += cos(angulo) * 8; // Vento empurra com maior força
+            obs.x += cos(angulo) * 8;
             obs.y += sin(angulo) * 8;
         } else {
             obs.x += obs.vx;
@@ -301,16 +341,15 @@ function atualizarObstaculos() {
     }
 }
 
+// -- Valida transição para o ecrã intermédio de nível ou ecrã de vitória
 function verificarProgressoNivel() {
     let todasCompletas = buracos.every(b => b.completa);
 
     if (todasCompletas) {
         if (nivelAtual < 3) {
-            nivelAtual++;
-            reservaAgua = 100;
-            inicializarNivel(nivelAtual);
+            estado = 5; // Transita para o ecrã intermédio de Nível Concluído
         } else {
-            estado = 3; // Ecrã de vitória final
+            estado = 3; // Transita para o ecrã de Vitória Final
         }
     }
 }
@@ -379,12 +418,14 @@ function desenhaChuva() {
     noStroke();
 }
 
+// -- Apresenta pontuação, nível e cronómetro de tempo no HUD
 function desenharHUD() {
     fill(0);
     textSize(18);
     textAlign(LEFT);
     text("Pontuação: " + pontuacao, 20, 30);
     text("Nível: " + nivelAtual + " / 3", 20, 55);
+    text("Tempo: " + formatarTempo(tempoDecorridoSegundos), 20, 80);
 
     if (estadoVento) {
         fill(255, 69, 0);
@@ -412,8 +453,14 @@ function mousePressed() {
         somaVolume = 0;
         amostras = 0;
         estado = 1; 
+    } else if (estado === 5) {
+        // Transição do ecrã intermédio para o próximo nível
+        nivelAtual++;
+        reservaAgua = 100;
+        inicializarNivel(nivelAtual);
+        estado = 2;
     } else if (estado === 3 || estado === 4) {
-        // Reinício do jogo
+        // Reinício completo a partir de Vitória ou Game Over
         nivelAtual = 1;
         reservaAgua = 100;
         pontuacao = 0;
