@@ -94,7 +94,7 @@ function ecraCalibracao() {
     if (millis() - inicioCalibracao >= 3000) {
         let ruidoMedio = somaVolume / max(1, amostras);
         limiteChuva = ruidoMedio + 0.08;
-        estado = 2; // Avança para o ecrã de execução do jogo
+        estado = 2; // Avança para o ecrã de jogo
     }
 }
 
@@ -218,62 +218,67 @@ function atualizarGotasAgua() {
     }
 }
 
-// -- Gerador de obstáculos vindo de múltiplas direções (Direita, Esquerda e Topo)
+// -- Gerador de obstáculos com escalamento progressivo de velocidade e frequência por nível
 function gerarObstaculos() {
-    let intervaloRespawn = map(nivelAtual, 1, 3, 2800, 1000);
+    // Reduz o intervalo entre respawns (3s no Nível 1 -> 1.8s no Nível 2 -> 0.8s no Nível 3)
+    let intervaloRespawn = map(nivelAtual, 1, 3, 3000, 800);
 
     if (millis() - tempoUltimoObstaculo > intervaloRespawn) {
-        let tipoObs = random(["passaro", "nuvemToxica"]);
-        let velBase = random(2, 3.5) + nivelAtual * 0.5;
-        let origens = ["direita", "esquerda", "topo"];
-        let origem = random(origens);
-        let ox, oy, vx, vy;
+        // No nível 3, há 40% de probabilidade de surgirem 2 obstáculos em simultâneo
+        let qtdObstaculos = (nivelAtual === 3 && random() < 0.4) ? 2 : 1;
 
-        if (origem === "direita") {
-            ox = width + 30;
-            oy = random(50, 220);
-            vx = -velBase;
-            vy = random(-0.8, 0.8);
-        } else if (origem === "esquerda") {
-            ox = -30;
-            oy = random(50, 220);
-            vx = velBase;
-            vy = random(-0.8, 0.8);
-        } else { // Origem pelo topo
-            ox = random(100, width - 100);
-            oy = -30;
-            vx = random(-1.5, 1.5);
-            vy = velBase;
+        for (let k = 0; k < qtdObstaculos; k++) {
+            let tipoObs = random(["passaro", "nuvemToxica"]);
+            // Velocidade aumenta significativamente por nível (N1: 2-3, N2: 4-5, N3: 6-7.5)
+            let velBase = random(2, 3) + (nivelAtual - 1) * 2.2;
+            let origens = ["direita", "esquerda", "topo"];
+            let origem = random(origens);
+            let ox, oy, vx, vy;
+
+            if (origem === "direita") {
+                ox = width + 30;
+                oy = random(50, 220);
+                vx = -velBase;
+                vy = random(-0.8, 0.8);
+            } else if (origem === "esquerda") {
+                ox = -30;
+                oy = random(50, 220);
+                vx = velBase;
+                vy = random(-0.8, 0.8);
+            } else { // Origem topo
+                ox = random(100, width - 100);
+                oy = -30;
+                vx = random(-1.5, 1.5);
+                vy = velBase;
+            }
+
+            obstaculos.push({
+                x: ox,
+                y: oy,
+                vx: vx,
+                vy: vy,
+                tipo: tipoObs
+            });
         }
-
-        obstaculos.push({
-            x: ox,
-            y: oy,
-            vx: vx,
-            vy: vy,
-            tipo: tipoObs
-        });
 
         tempoUltimoObstaculo = millis();
     }
 }
 
-// -- Movimento multidirecional, colisão e repelimento radial por sopro (Vento)
+// -- Movimento multidirecional, colisão e repelimento radial por vento
 function atualizarObstaculos() {
     for (let i = obstaculos.length - 1; i >= 0; i--) {
         let obs = obstaculos[i];
 
-        // Se o VENTO estiver ativo, empurra os obstáculos para fora em redor da nuvem
         if (estadoVento) {
             let angulo = atan2(obs.y - nuvemY, obs.x - nuvemX);
-            obs.x += cos(angulo) * 7;
-            obs.y += sin(angulo) * 7;
+            obs.x += cos(angulo) * 8; // Vento empurra com maior força
+            obs.y += sin(angulo) * 8;
         } else {
             obs.x += obs.vx;
             obs.y += obs.vy;
         }
 
-        // Desenho visual dos obstáculos
         if (obs.tipo === "passaro") {
             fill(200, 50, 50);
             triangle(obs.x, obs.y, obs.x + 18, obs.y - 8, obs.x + 18, obs.y + 8);
@@ -282,7 +287,6 @@ function atualizarObstaculos() {
             ellipse(obs.x, obs.y, 38, 24);
         }
 
-        // Deteção de colisão com a nuvem do jogador
         let d = dist(nuvemX, nuvemY, obs.x, obs.y);
         if (d < 45) {
             reservaAgua = max(0, reservaAgua - 15);
@@ -291,14 +295,12 @@ function atualizarObstaculos() {
             continue;
         }
 
-        // Remove obstáculos que saiam bastante da área visível do canvas
         if (obs.x < -60 || obs.x > width + 60 || obs.y < -60 || obs.y > height - 80) {
             obstaculos.splice(i, 1);
         }
     }
 }
 
-// -- Valida a transição de nível ou a vitória final
 function verificarProgressoNivel() {
     let todasCompletas = buracos.every(b => b.completa);
 
@@ -411,7 +413,7 @@ function mousePressed() {
         amostras = 0;
         estado = 1; 
     } else if (estado === 3 || estado === 4) {
-        // Reinício completo do jogo
+        // Reinício do jogo
         nivelAtual = 1;
         reservaAgua = 100;
         pontuacao = 0;
