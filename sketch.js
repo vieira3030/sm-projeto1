@@ -423,17 +423,14 @@ function desenhaCenario() {
 }
 
 function desenhaNuvem() {
-    // Escurece a nuvem consoante a falta de água
     let corNuvem = map(reservaAgua, 0, 100, 255, 100);
     fill(corNuvem);
     noStroke();
     
-    // Geometria base da nuvem
     ellipse(nuvemX, nuvemY, 100, 40);
     ellipse(nuvemX - 25, nuvemY - 15, 60, 60);
     ellipse(nuvemX + 25, nuvemY - 15, 60, 60);
 
-    // Expressão facial
     fill(0);
     ellipse(nuvemX - 15, nuvemY - 5, 6, 6); 
     ellipse(nuvemX + 15, nuvemY - 5, 6, 6); 
@@ -443,11 +440,18 @@ function desenhaNuvem() {
     arc(nuvemX, nuvemY + 5, 20, 10, 0, PI); 
     noStroke();
     
-    // Indicador numérico de água
-    fill(0);
-    textSize(14);
-    textAlign(CENTER);
-    text(floor(reservaAgua) + "%", nuvemX, nuvemY - 45);
+    // -- Barra de água dinâmica (Puxada mais para cima: nuvemY - 55)
+    let larguraBarra = 60;
+    let alturaBarra = 8;
+    let preenchimento = map(reservaAgua, 0, 100, 0, larguraBarra);
+
+    // Fundo da barra (branco semitransparente)
+    fill(255, 255, 255, 150);
+    rect(nuvemX - larguraBarra / 2, nuvemY - 55, larguraBarra, alturaBarra, 4); 
+
+    // Preenchimento azul
+    fill(0, 150, 255);
+    rect(nuvemX - larguraBarra / 2, nuvemY - 55, preenchimento, alturaBarra, 4);
 }
 
 function desenhaChuva() {
@@ -463,20 +467,81 @@ function desenhaChuva() {
 }
 
 function desenharHUD() {
+    // -- Barra de fundo semitransparente para o HUD
+    fill(255, 255, 255, 120);
+    noStroke();
+    rect(0, 0, width, 45);
+
     fill(0);
     textSize(18);
-    textAlign(LEFT);
-    text("Pontuação: " + pontuacao, 20, 30);
-    text("Nível: " + nivelAtual + " / 3", 20, 55);
-    text("Tempo: " + formatarTempo(tempoDecorridoSegundos), 20, 80);
+    
+    // -- Pontuação alinhada à esquerda
+    textAlign(LEFT, CENTER);
+    text("Pontuação: " + pontuacao, 20, 22);
+    
+    // -- Nível alinhado ao centro
+    textAlign(CENTER, CENTER);
+    text("Nível: " + nivelAtual + " / 3", width / 2, 22);
+    
+    // -- Tempo alinhado à direita
+    textAlign(RIGHT, CENTER);
+    text("Tempo: " + formatarTempo(tempoDecorridoSegundos), width - 20, 22);
 
-    // Alerta visual quando o jogador está a soprar
+    // -- Alerta de Vento 
     if (estadoVento) {
         fill(255, 69, 0);
         textSize(20);
-        textAlign(CENTER);
-        text("SOPRO DE VENTO ATIVO!", width / 2, 40);
+        textAlign(CENTER, CENTER);
+        text("SOPRO DE VENTO ATIVO!", width / 2, 70);
     }
+
+    // -- Adiciona a barra do microfone no lado direito
+    desenharBarraAudio();
+}
+
+function desenharBarraAudio() {
+    let barraLargura = 20; // Mais larga
+    let barraAltura = 200; // Mais alta
+    let barraX = width - barraLargura - 30; // Posicionada do lado direito
+    let barraY = 100;
+
+    let vol = mic.getLevel();
+    let volVisual = map(constrain(vol, 0, 0.5), 0, 0.5, 0, barraAltura);
+    let limiteChuvaVis = map(constrain(limiteChuva, 0, 0.5), 0, 0.5, 0, barraAltura);
+    let limiteVentoVis = map(constrain(limiteVento, 0, 0.5), 0, 0.5, 0, barraAltura);
+
+    // Fundo da barra
+    fill(0, 0, 0, 50);
+    noStroke();
+    rect(barraX, barraY, barraLargura, barraAltura, 5);
+
+    // Preenchimento do volume (Muda de cor consoante a ação)
+    if (estadoVento) fill(255, 69, 0); // Laranja se está a soprar
+    else if (estadoChuva) fill(33, 150, 243); // Azul se está a chover
+    else fill(100, 200, 100); // Verde se está normal/silêncio
+
+    // Desenha a barra de baixo para cima
+    rect(barraX, barraY + barraAltura - volVisual, barraLargura, volVisual, 5);
+
+    // Linha de gatilho da Chuva
+    stroke(33, 150, 243);
+    strokeWeight(2);
+    line(barraX - 5, barraY + barraAltura - limiteChuvaVis, barraX + barraLargura + 5, barraY + barraAltura - limiteChuvaVis);
+
+    // Linha de gatilho do Vento
+    stroke(255, 69, 0);
+    line(barraX - 5, barraY + barraAltura - limiteVentoVis, barraX + barraLargura + 5, barraY + barraAltura - limiteVentoVis);
+    noStroke();
+
+    // Textos das linhas (alinhados à esquerda da barra para não sair do ecrã)
+    fill(0);
+    textSize(12);
+    textAlign(RIGHT, CENTER);
+    text("Vento", barraX - 8, barraY + barraAltura - limiteVentoVis);
+    text("Chuva", barraX - 8, barraY + barraAltura - limiteChuvaVis);
+    
+    textAlign(CENTER, BOTTOM);
+    text("Mic", barraX + barraLargura / 2, barraY - 10);
 }
 
 function desenharRodape() {
