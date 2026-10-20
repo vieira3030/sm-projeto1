@@ -1,32 +1,36 @@
-// -- Variáveis globais para controlo de ecrãs
+// -- Variáveis globais para controlo de ecrãs e níveis
 let estado = 0; // 0: Início, 1: Calibração, 2: Jogo, 3: Resultado
-let fonte;
+let nivelAtual = 1; // Níveis 1, 2 e 3
 
-// -- Variáveis do microfone e calibração de ruído
+// -- Variáveis do microfone e calibração
 let mic;
 let inicioCalibracao;
 let somaVolume = 0;
 let amostras = 0;
-let limiteChuva = 0; // Definido dinamicamente na calibração
-let limiteVento = 0.40; // Valor fixo para detetar um sopro forte
+let limiteChuva = 0;
+let limiteVento = 0.40; // Limite fixo para detetar o sopro do vento
 let estadoChuva = false;
+let estadoVento = false;
 
-// -- Variáveis do jogador (Nuvem) e progresso
+// -- Variáveis da Nuvem (Jogador) e jogo
 let nuvemX = 400;
 let nuvemY = 150;
-let reservaAgua = 100; // Inicia com 100% de capacidade
+let reservaAgua = 100;
 let pontuacao = 0;
 
-// -- Zonas de plantação (coordenada X, % crescimento, estado de conclusão)
+// -- Estrutura de dados para as 3 zonas de plantação
 let buracos = [
     { x: 200, crescimento: 0, completa: false },
     { x: 400, crescimento: 0, completa: false },
     { x: 600, crescimento: 0, completa: false }
 ];
 
+// -- Array de obstáculos dinâmicos e temporizador
+let obstaculos = [];
+let tempoUltimoObstaculo = 0;
+
 function setup() {
     createCanvas(800, 500);
-    // -- Inicializa o microfone
     mic = new p5.AudioIn();
     mic.start();
 }
@@ -34,7 +38,7 @@ function setup() {
 function draw() {
     background(135, 206, 235); // Fundo azul céu
 
-    // -- Máquina de estados para alternar entre os ecrãs da aplicação
+    // -- Máquina de estados
     if (estado === 0) {
         ecraInicio();
     } else if (estado === 1) {
@@ -45,7 +49,7 @@ function draw() {
         ecraResultado();
     }
 
-    desenharRodape(); // Textos obrigatórios visíveis em todos os ecrãs
+    desenharRodape(); // Exibe identificação no rodapé
 }
 
 function ecraInicio() {
@@ -64,16 +68,14 @@ function ecraCalibracao() {
     text("A calibrar o microfone...", width / 2, height / 2 - 20);
     text("Por favor, mantém o silêncio durante 3 segundos.", width / 2, height / 2 + 20);
 
-    // -- Regista o volume do ambiente para calcular a média
     let v = mic.getLevel();
     somaVolume += v;
     amostras++;
 
-    // -- Termina calibração após 3 segundos e define o limite da chuva
     if (millis() - inicioCalibracao >= 3000) {
         let ruidoMedio = somaVolume / max(1, amostras);
-        limiteChuva = ruidoMedio + 0.08; // Margem para ignorar ruído de fundo
-        estado = 2; // Avança para o ecrã de execução do jogo
+        limiteChuva = ruidoMedio + 0.08;
+        estado = 2; // Inicia o jogo após calibração
     }
 }
 
@@ -82,30 +84,28 @@ function ecraJogo() {
 
     let vol = mic.getLevel();
 
-    // -- Histerese: Deteta sopro forte (Vento) ou som contínuo (Chuva)
+    // -- Histerese de áudio: Separação entre Chuva e Vento
     if (vol > limiteVento) {
-        fill(255, 0, 0);
-        textSize(24);
-        textAlign(CENTER);
-        text("VENTO ATIVO!", width / 2, 50);
+        estadoVento = true;
+        estadoChuva = false;
     } else if (!estadoChuva && vol > limiteChuva) {
-        estadoChuva = true; // Liga chuva ao passar o limite superior
+        estadoChuva = true;
+        estadoVento = false;
     } else if (estadoChuva && vol < limiteChuva - 0.02) {
-        estadoChuva = false; // Desliga chuva ao cair abaixo do limite inferior
+        estadoChuva = false;
+        estadoVento = false;
+    } else {
+        estadoVento = false;
     }
 
-    // -- Consome água e aciona o crescimento das árvores se estiver a chover
+    // -- Ação de chover (gasta água e faz crescer árvores)
     if (estadoChuva && reservaAgua > 0) {
-        reservaAgua -= 0.1; // Reduz a barra de água lentamente
+        reservaAgua -= 0.1;
         desenhaChuva();
         
-        // -- Verifica a colisão visual da chuva com as zonas de plantação
         for (let i = 0; i < buracos.length; i++) {
-            // Cresce a árvore se a nuvem estiver alinhada e a árvore não estiver no máximo
             if (abs(nuvemX - buracos[i].x) < 50 && !buracos[i].completa) {
-                buracos[i].crescimento += 0.5; 
-                
-                // Conclui o crescimento e atribui pontos finais
+                buracos[i].crescimento += 0.5;
                 if (buracos[i].crescimento >= 100) {
                     buracos[i].completa = true;
                     pontuacao += 10;
@@ -114,59 +114,131 @@ function ecraJogo() {
         }
     }
 
-    // -- Controla o movimento horizontal da nuvem através do teclado
+    // -- Controlo de movimento lateral com teclado
     if (keyIsDown(LEFT_ARROW)) nuvemX -= 5;
     if (keyIsDown(RIGHT_ARROW)) nuvemX += 5;
-    
-    // -- Impede a nuvem de sair dos limites laterais do ecrã
     nuvemX = constrain(nuvemX, 60, width - 60);
 
+    // -- Gestão e atualização dos obstáculos aleatórios
+    gerarObstaculos();
+    atualizarObstaculos();
+
+    // -- Verifica se o nível foi concluído (todas as 3 árvores germinadas)
+    verificarProgressoNivel();
+
     desenhaNuvem();
-    
-    // -- Apresenta a pontuação atual no canto superior
-    fill(0);
-    textSize(20);
-    textAlign(LEFT);
-    text("Pontuação: " + pontuacao, 20, 30);
+    desenharHUD();
 }
 
 function ecraResultado() {
     fill(0);
     textAlign(CENTER);
     textSize(32);
-    text("FIM DO JOGO", width / 2, height / 2 - 20);
-    textSize(18);
-    text("Clica para repetir", width / 2, height / 2 + 20);
+    text("PARABÉNS! JOGO CONCLUÍDO", width / 2, height / 2 - 30);
+    textSize(22);
+    text("Pontuação Final: " + pontuacao, width / 2, height / 2 + 10);
+    textSize(16);
+    text("Clica para jogar novamente", width / 2, height / 2 + 50);
+}
+
+// -- Gerador de obstáculos com aleatoriedade baseada no nível atual
+function gerarObstaculos() {
+    // Frequência de respawn diminui (fica mais difícil) em níveis mais altos
+    let intervaloRespawn = map(nivelAtual, 1, 3, 3000, 1200);
+
+    if (millis() - tempoUltimoObstaculo > intervaloRespawn) {
+        let tipoObs = random(["passaro", "nuvemToxica"]);
+        let velocidadeBase = random(2, 4) + nivelAtual; // Aumenta velocidade por nível
+
+        obstaculos.push({
+            x: width + 30,
+            y: random(80, 220),
+            vel: velocidadeBase,
+            tipo: tipoObs
+        });
+
+        tempoUltimoObstaculo = millis();
+    }
+}
+
+// -- Movimento, colisão e resposta ao vento forte
+function atualizarObstaculos() {
+    for (let i = obstaculos.length - 1; i >= 0; i--) {
+        let obs = obstaculos[i];
+
+        // Se o VENTO estiver ativo, empurra o obstáculo para trás com força
+        if (estadoVento) {
+            obs.x += 8; // Efeito de repulsão do vento
+        } else {
+            obs.x -= obs.vel; // Movimento normal para a esquerda
+        }
+
+        // Desenho dos obstáculos
+        if (obs.tipo === "passaro") {
+            fill(200, 50, 50);
+            triangle(obs.x, obs.y, obs.x + 20, obs.y - 10, obs.x + 20, obs.y + 10); // Desenho simplificado do pássaro
+        } else {
+            fill(80, 0, 80); // Nuvem tóxica roxa
+            ellipse(obs.x, obs.y, 40, 25);
+        }
+
+        // Deteção de colisão com a nuvem do jogador
+        let d = dist(nuvemX, nuvemY, obs.x, obs.y);
+        if (d < 45) {
+            reservaAgua = max(0, reservaAgua - 15); // Perde 15% de água
+            pontuacao = max(0, pontuacao - 5); // Perde 5 pontos
+            obstaculos.splice(i, 1); // Remove o obstáculo após colisão
+            continue;
+        }
+
+        // Remove obstáculos que saiam do ecrã
+        if (obs.x < -40 || obs.x > width + 100) {
+            obstaculos.splice(i, 1);
+        }
+    }
+}
+
+// -- Verifica se todas as árvores cresceram para passar de nível
+function verificarProgressoNivel() {
+    let todasCompletas = buracos.every(b => b.completa);
+
+    if (todasCompletas) {
+        if (nivelAtual < 3) {
+            nivelAtual++; // Avança de nível
+            reservaAgua = 100; // Recarrega a água
+            obstaculos = []; // Limpa obstáculos do ecrã
+            // Reinicia os buracos para o novo nível
+            for (let i = 0; i < buracos.length; i++) {
+                buracos[i].crescimento = 0;
+                buracos[i].completa = false;
+            }
+        } else {
+            estado = 3; // Fim do jogo / Vitória no nível 3
+        }
+    }
 }
 
 function desenhaCenario() {
-    // -- Desenha o chão de terra
     noStroke();
     fill(139, 69, 19); 
     rect(0, height - 100, width, 100);
 
-    // -- Desenha as covas e as árvores em crescimento
     for (let i = 0; i < buracos.length; i++) {
         let bx = buracos[i].x;
         let by = height - 50;
 
-        // -- Cova na terra
         fill(92, 58, 33); 
         ellipse(bx, by, 90, 30);
         
-        // -- Árvore visível apenas se já tiver começado a germinar
         if (buracos[i].crescimento > 0) {
-            // Mapeia o valor de crescimento (0 a 100) para pixels visuais
             let altura = map(buracos[i].crescimento, 0, 100, 0, 40);
             let tamanhoFolhas = map(buracos[i].crescimento, 0, 100, 0, 40);
             
-            // Tronco
             stroke(101, 67, 33);
             strokeWeight(4);
             line(bx, by, bx, by - altura);
             noStroke();
             
-            // Folhagem
             fill(34, 139, 34);
             circle(bx, by - altura, tamanhoFolhas);
         }
@@ -174,17 +246,14 @@ function desenhaCenario() {
 }
 
 function desenhaNuvem() {
-    // -- Escurece a cor da nuvem consoante a quantidade de água disponível
     let corNuvem = map(reservaAgua, 0, 100, 255, 100);
     fill(corNuvem);
     noStroke();
     
-    // -- Corpo principal da nuvem
     ellipse(nuvemX, nuvemY, 100, 40);
     ellipse(nuvemX - 25, nuvemY - 15, 60, 60);
     ellipse(nuvemX + 25, nuvemY - 15, 60, 60);
 
-    // -- Olhos e sorriso (Expressão da nuvem)
     fill(0);
     ellipse(nuvemX - 15, nuvemY - 5, 6, 6); 
     ellipse(nuvemX + 15, nuvemY - 5, 6, 6); 
@@ -194,7 +263,6 @@ function desenhaNuvem() {
     arc(nuvemX, nuvemY + 5, 20, 10, 0, PI); 
     noStroke();
     
-    // -- Indicador textual da percentagem da reserva de água
     fill(0);
     textSize(14);
     textAlign(CENTER);
@@ -202,7 +270,6 @@ function desenhaNuvem() {
 }
 
 function desenhaChuva() {
-    // -- Gera gotas de chuva azuis em posições aleatórias debaixo da nuvem
     stroke(33, 150, 243); 
     strokeWeight(2);
     for(let i = 0; i < 6; i++) {
@@ -213,8 +280,23 @@ function desenhaChuva() {
     noStroke();
 }
 
+// -- Apresenta indicadores de jogo (Interface HUD)
+function desenharHUD() {
+    fill(0);
+    textSize(18);
+    textAlign(LEFT);
+    text("Pontuação: " + pontuacao, 20, 30);
+    text("Nível: " + nivelAtual + " / 3", 20, 55);
+
+    if (estadoVento) {
+        fill(255, 69, 0);
+        textSize(20);
+        textAlign(CENTER);
+        text("SOPRO DE VENTO ATIVO!", width / 2, 40);
+    }
+}
+
 function desenharRodape() {
-    // -- Informações exigidas no enunciado do projeto
     fill(0);
     textSize(12);
     textAlign(LEFT, BOTTOM);
@@ -225,19 +307,19 @@ function desenharRodape() {
 }
 
 function mousePressed() {
-    // -- Obrigatório para o navegador autorizar a captura de áudio
     userStartAudio(); 
 
     if (estado === 0) {
-        // Reinicia as variáveis antes de começar a calibração
         inicioCalibracao = millis();
         somaVolume = 0;
         amostras = 0;
         estado = 1; 
     } else if (estado === 3) {
-        // Reinicia todos os valores para começar um novo jogo
+        // Reinício completo de variáveis
+        nivelAtual = 1;
         reservaAgua = 100;
         pontuacao = 0;
+        obstaculos = [];
         for (let i = 0; i < buracos.length; i++) {
             buracos[i].crescimento = 0;
             buracos[i].completa = false;
