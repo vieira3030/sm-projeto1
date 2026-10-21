@@ -230,41 +230,44 @@ function inicializarNivel(nivel) {
 function ecraInicio() {
     push(); // Guarda as configurações de estilo para não afetar o resto do jogo
     
-    // -- Caixa de fundo escurecida (ajuda imenso a ler o texto)
+    // -- Caixa de fundo escurecida (ajustada para caber a nova linha)
     fill(0, 0, 0, 120);
     noStroke();
     rectMode(CENTER);
-    rect(width / 2, height / 2 - 10, 680, 330, 20); // Caixa com cantos arredondados
+    rect(width / 2, height / 2, 740, 400, 20); 
     
     // -- Título com efeito de sombra
     textAlign(CENTER, CENTER);
     textSize(38);
     fill(0, 150); 
-    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2 + 3, 93); // Sombra
+    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2 + 3, 83); 
     fill(255); 
-    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2, 90); // Título branco
+    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2, 80); 
 
-    // -- Objetivo (destacado a verde claro)
+    // -- Objetivo principal (verde)
     textSize(18);
     fill(150, 255, 150); 
-    text("🎯 Objetivo: Faz crescer todas as árvores antes que a água acabe.", width/2, 155);
+    text("🎯 Objetivo: Faz crescer todas as árvores antes que a água acabe.", width/2, 140);
 
-    // -- Instruções / Controlos
+    // -- Controlos (branco)
     fill(255);
-    textSize(18);
-    text("🎮 Setas do Teclado: Movem a nuvem", width/2, 210);
-    text("🌧️ Som constante (Mic): Faz chover (gasta água)", width/2, 245);
-    text("💨 Sopro forte (Mic): Vento que afasta pássaros e meteoros", width/2, 280);
+    text("🎮 Setas do Teclado: Movem a nuvem", width/2, 190);
+    text("🌧️ Som constante (Mic): Faz chover (gasta água)", width/2, 220);
+    text("💨 Sopro forte (Mic): Vento que afasta pássaros e meteoros", width/2, 250);
     
-    // -- Dica extra (destacada a azul claro)
+    // -- AVISO DE PERIGO (vermelho)
+    fill(255, 100, 100); 
+    text("⚠️ Cuidado: Evita os obstáculos para não perderes água e pontos!", width/2, 290);
+
+    // -- Dica extra (azul)
     fill(135, 206, 250); 
     text("💧 Gotas azuis: Apanha-as para recarregar a tua reserva", width/2, 320);
 
-    // -- Mensagem de Start (pisca suavemente usando a função sin e millis)
+    // -- Mensagem de Start a piscar (dourado)
     let alphaPiscar = map(sin(millis() / 250), -1, 1, 100, 255);
-    fill(255, 215, 0, alphaPiscar); // Amarelo dourado a piscar
+    fill(255, 215, 0, alphaPiscar); 
     textSize(22);
-    text("✨ Prime [ ESPAÇO ] para calibrar o microfone ✨", width/2, 385);
+    text("✨ Prime [ ESPAÇO ] para calibrar o microfone ✨", width/2, 380);
     
     pop(); // Restaura as configurações normais
 }
