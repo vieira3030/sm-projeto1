@@ -54,6 +54,10 @@ function setup() {
     
     // Volume ambiente mais baixo para não criar loop de feedback no microfone
     if (somFundo) somFundo.setVolume(0.3);
+    
+    // -- TIPOGRAFIA GLOBAL
+    textFont('sans-serif');
+    textStyle(BOLD);
 }
 
 // O draw corre 60 vezes por segundo, gerindo qual ecrã está visível
@@ -354,7 +358,10 @@ function atualizarObstaculos() {
             triangle(obs.x, obs.y, obs.x + 18, obs.y - 8, obs.x + 18, obs.y + 8);
         } else {
             fill(80, 0, 80);
-            ellipse(obs.x, obs.y, 38, 24);
+            // -- Nuvem tóxica "fofa"
+            ellipse(obs.x, obs.y, 45, 25);
+            ellipse(obs.x - 12, obs.y - 8, 30, 30);
+            ellipse(obs.x + 12, obs.y - 8, 30, 30);
         }
 
         // Verifica colisão com o jogador e aplica penalizações
@@ -395,6 +402,10 @@ function desenhaCenario() {
     noStroke();
     fill(139, 69, 19); 
     rect(0, height - 100, width, 100); // Chão de terra
+    
+    // -- Linha de relva no topo da terra
+    fill(34, 139, 34); 
+    rect(0, height - 100, width, 10); 
 
     // A largura da cova encolhe se houver mais buracos no nível
     let larguraBuraco = map(buracos.length, 3, 7, 80, 45);
@@ -500,9 +511,9 @@ function desenharHUD() {
 }
 
 function desenharBarraAudio() {
-    let barraLargura = 20; // Mais larga
-    let barraAltura = 200; // Mais alta
-    let barraX = width - barraLargura - 30; // Posicionada do lado direito
+    let barraLargura = 20; 
+    let barraAltura = 200; 
+    let barraX = width - barraLargura - 30; 
     let barraY = 100;
 
     let vol = mic.getLevel();
@@ -516,9 +527,9 @@ function desenharBarraAudio() {
     rect(barraX, barraY, barraLargura, barraAltura, 5);
 
     // Preenchimento do volume (Muda de cor consoante a ação)
-    if (estadoVento) fill(255, 69, 0); // Laranja se está a soprar
-    else if (estadoChuva) fill(33, 150, 243); // Azul se está a chover
-    else fill(100, 200, 100); // Verde se está normal/silêncio
+    if (estadoVento) fill(255, 69, 0); 
+    else if (estadoChuva) fill(33, 150, 243); 
+    else fill(100, 200, 100); 
 
     // Desenha a barra de baixo para cima
     rect(barraX, barraY + barraAltura - volVisual, barraLargura, volVisual, 5);
@@ -533,7 +544,7 @@ function desenharBarraAudio() {
     line(barraX - 5, barraY + barraAltura - limiteVentoVis, barraX + barraLargura + 5, barraY + barraAltura - limiteVentoVis);
     noStroke();
 
-    // Textos das linhas (alinhados à esquerda da barra para não sair do ecrã)
+    // Textos das linhas 
     fill(0);
     textSize(12);
     textAlign(RIGHT, CENTER);
