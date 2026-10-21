@@ -29,11 +29,13 @@ let gotasAgua = [];
 let tempoUltimoObstaculo = 0;
 let tempoUltimaGota = 0;
 
-// -- FICHEIROS DE ÁUDIO MULTIMÉDIA
+// -- VARIÁVEIS DE ÁUDIO E IMAGENS
 let somGota, somArvore, somDano, somNivel, somFim, somVitoria, somFundo;
+let imgNuvem, imgPassaro, imgMeteoro, imgGota; // Novas variáveis para imagens
 
 // Carrega os recursos para a memória antes do jogo arrancar
 function preload() {
+    // ÁUDIOS
     somGota = loadSound('sons/gota.mp3');
     somArvore = loadSound('sons/arvore.mp3');
     somDano = loadSound('sons/dano.mp3');
@@ -41,6 +43,12 @@ function preload() {
     somFim = loadSound('sons/fim.mp3');         
     somVitoria = loadSound('sons/vitoria.mp3'); 
     somFundo = loadSound('sons/fundo.mp3');     
+
+    // IMAGENS (Carrega e ignora erros se os ficheiros ainda não existirem)
+    imgNuvem = loadImage('imagens/nuvem.png', () => {}, () => { console.log("A carregar fallback para Nuvem"); });
+    imgPassaro = loadImage('imagens/passaro.png', () => {}, () => { console.log("A carregar fallback para Passaro"); });
+    imgMeteoro = loadImage('imagens/meteoro.png', () => {}, () => { console.log("A carregar fallback para Meteoro"); });
+    imgGota = loadImage('imagens/gota_agua.png', () => {}, () => { console.log("A carregar fallback para Gota"); });
 }
 
 function setup() {
@@ -285,9 +293,15 @@ function atualizarGotasAgua() {
         let g = gotasAgua[i];
         g.y += g.vel; // Aplica gravidade
 
-        fill(0, 191, 255);
-        noStroke();
-        ellipse(g.x, g.y, 14, 20);
+        // Tenta usar a imagem da Gota PNG. Se falhar, usa a elipse original.
+        if (imgGota && imgGota.width > 0) {
+            imageMode(CENTER);
+            image(imgGota, g.x, g.y, 20, 26);
+        } else {
+            fill(0, 191, 255);
+            noStroke();
+            ellipse(g.x, g.y, 14, 20);
+        }
 
         // Verifica colisão da gota com a nuvem (raio de 45px)
         let d = dist(nuvemX, nuvemY, g.x, g.y);
@@ -315,7 +329,7 @@ function gerarObstaculos() {
         let qtdObstaculos = (nivelAtual === 3 && random() < 0.4) ? 2 : 1;
 
         for (let k = 0; k < qtdObstaculos; k++) {
-            let tipoObs = random(["passaro", "nuvemToxica"]);
+            let tipoObs = random(["passaro", "meteoro"]); // Alterado para pássaro e meteoro
             let velBase = random(2, 3) + (nivelAtual - 1) * 2.2;
             
             // Sorteia o local de origem do obstáculo
@@ -352,16 +366,32 @@ function atualizarObstaculos() {
             obs.y += obs.vy;
         }
 
-        // Diferencia visualmente pássaros e nuvens tóxicas
+        imageMode(CENTER);
+
+        // -- DESENHO DE OBSTÁCULOS (COM FALLBACK)
         if (obs.tipo === "passaro") {
-            fill(200, 50, 50);
-            triangle(obs.x, obs.y, obs.x + 18, obs.y - 8, obs.x + 18, obs.y + 8);
-        } else {
-            fill(80, 0, 80);
-            // -- Nuvem tóxica "fofa"
-            ellipse(obs.x, obs.y, 45, 25);
-            ellipse(obs.x - 12, obs.y - 8, 30, 30);
-            ellipse(obs.x + 12, obs.y - 8, 30, 30);
+            if (imgPassaro && imgPassaro.width > 0) {
+                // Inverte a imagem conforme a direção do pássaro
+                push();
+                translate(obs.x, obs.y);
+                if (obs.vx > 0) scale(-1, 1); // Olha para a direita
+                image(imgPassaro, 0, 0, 36, 36);
+                pop();
+            } else {
+                // Fallback do triângulo vermelho
+                fill(200, 50, 50);
+                triangle(obs.x, obs.y, obs.x + 18, obs.y - 8, obs.x + 18, obs.y + 8);
+            }
+        } else { // Meteoro
+            if (imgMeteoro && imgMeteoro.width > 0) {
+                image(imgMeteoro, obs.x, obs.y, 42, 42);
+            } else {
+                // Fallback fofo roxo para o meteoro/gás antigo
+                fill(80, 0, 80);
+                ellipse(obs.x, obs.y, 45, 25);
+                ellipse(obs.x - 12, obs.y - 8, 30, 30);
+                ellipse(obs.x + 12, obs.y - 8, 30, 30);
+            }
         }
 
         // Verifica colisão com o jogador e aplica penalizações
@@ -434,22 +464,32 @@ function desenhaCenario() {
 }
 
 function desenhaNuvem() {
-    let corNuvem = map(reservaAgua, 0, 100, 255, 100);
-    fill(corNuvem);
-    noStroke();
-    
-    ellipse(nuvemX, nuvemY, 100, 40);
-    ellipse(nuvemX - 25, nuvemY - 15, 60, 60);
-    ellipse(nuvemX + 25, nuvemY - 15, 60, 60);
+    // Se a imagem da nuvem existir e carregar, desenha a imagem.
+    // Se não, faz a nuvem com elipses.
+    if (imgNuvem && imgNuvem.width > 0) {
+        // Aplica o mesmo tom escurecido do fallback se quiseres, mas idealmente usa só o sprite
+        tint(map(reservaAgua, 0, 100, 255, 120)); // Escurece a imagem quando perde água
+        imageMode(CENTER);
+        image(imgNuvem, nuvemX, nuvemY, 110, 70);
+        noTint(); // Reseta tint para não influenciar outras imagens
+    } else {
+        let corNuvem = map(reservaAgua, 0, 100, 255, 100);
+        fill(corNuvem);
+        noStroke();
+        
+        ellipse(nuvemX, nuvemY, 100, 40);
+        ellipse(nuvemX - 25, nuvemY - 15, 60, 60);
+        ellipse(nuvemX + 25, nuvemY - 15, 60, 60);
 
-    fill(0);
-    ellipse(nuvemX - 15, nuvemY - 5, 6, 6); 
-    ellipse(nuvemX + 15, nuvemY - 5, 6, 6); 
-    noFill();
-    stroke(0);
-    strokeWeight(2);
-    arc(nuvemX, nuvemY + 5, 20, 10, 0, PI); 
-    noStroke();
+        fill(0);
+        ellipse(nuvemX - 15, nuvemY - 5, 6, 6); 
+        ellipse(nuvemX + 15, nuvemY - 5, 6, 6); 
+        noFill();
+        stroke(0);
+        strokeWeight(2);
+        arc(nuvemX, nuvemY + 5, 20, 10, 0, PI); 
+        noStroke();
+    }
     
     // -- Barra de água dinâmica (Puxada mais para cima: nuvemY - 55)
     let larguraBarra = 60;
@@ -526,7 +566,7 @@ function desenharBarraAudio() {
     noStroke();
     rect(barraX, barraY, barraLargura, barraAltura, 5);
 
-    // Preenchimento do volume (Muda de cor consoante a ação)
+    // Preenchimento do volume (Muda de colos conforme a ação)
     if (estadoVento) fill(255, 69, 0); 
     else if (estadoChuva) fill(33, 150, 243); 
     else fill(100, 200, 100); 
