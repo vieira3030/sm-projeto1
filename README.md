@@ -84,8 +84,8 @@ Todo o material não original está identificado aqui e no relatório.
 | Material | Origem | Licença |
 | --- | --- | --- |
 | p5.js e p5.sound | [p5js.org](https://p5js.org/) | LGPL 2.1 |
-| Sons (`gota`, `arvore`, `dano`, `nivel`, `fim`, `vitoria`, `fundo`) | _(preencher: site ou autor)_ | _(preencher)_ |
-| Imagens (`nuvem`, `passaro`, `meteoro`, `gota_agua`) | _(preencher: site ou autor)_ | _(preencher)_ |
+| Sons (`gota`, `arvore`, `dano`, `nivel`, `fim`, `vitoria`, `fundo`) | _(freesound.org )_ | _()_ |
+| Imagens (`nuvem`, `passaro`, `meteoro`, `gota_agua`) | _(Gerado com apoio do Claude (Anthropic))_ | _()_ |
 
 ## 🤖 Utilização de IA
 
