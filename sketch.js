@@ -2,40 +2,35 @@
 let estado = 0; // 0: Início, 1: Calibração, 2: Jogo, 3: Vitória, 4: Game Over, 5: Transição
 let nivelAtual = 1; 
 
-// -- GESTÃO DE TEMPO
+// -- GESTÃO DE TEMPO E CRONÓMETRO
 let tempoInicioJogo = 0;
 let tempoDecorridoSegundos = 0;
+let tempoPausaIniciado = 0; // Guarda o momento em que o jogo pausa
 
 // -- MICROFONE E HISTERESE (CONTROLO DE ÁUDIO)
 let mic;
 let inicioCalibracao;
 let somaVolume = 0;
 let amostras = 0;
-let limiteChuva = 0; // Calculado dinamicamente na calibração
-let limiteVento = 0.40; // Valor fixo para detetar sopro forte
+let limiteChuva = 0; 
+let limiteVentoOn = 0.40;  // Liga o vento
+let limiteVentoOff = 0.34; // Desliga o vento (Histerese)
 let estadoChuva = false;
 let estadoVento = false;
 
-// -- JOGADOR (NUVEM) E PROGRESSO
-let nuvemX = 400;
-let nuvemY = 150;
-let reservaAgua = 100; // Percentagem de água disponível (0 a 100)
-let pontuacao = 0;
-
-// -- ARRAYS DE ENTIDADES DINÂMICAS
+// -- ENTIDADES (POO - Programação Orientada a Objetos)
+let jogador;
 let buracos = [];
 let obstaculos = [];
 let gotasAgua = []; 
 let tempoUltimoObstaculo = 0;
 let tempoUltimaGota = 0;
 
-// -- VARIÁVEIS DE ÁUDIO E IMAGENS
+// -- ÁUDIO E IMAGENS
 let somGota, somArvore, somDano, somNivel, somFim, somVitoria, somFundo;
-let imgNuvem, imgPassaro, imgMeteoro, imgGota; // Novas variáveis para imagens
+let imgNuvem, imgPassaro, imgMeteoro, imgGota;
 
-// Carrega os recursos para a memória antes do jogo arrancar
 function preload() {
-    // ÁUDIOS
     somGota = loadSound('sons/gota.mp3');
     somArvore = loadSound('sons/arvore.mp3');
     somDano = loadSound('sons/dano.mp3');
@@ -44,598 +39,456 @@ function preload() {
     somVitoria = loadSound('sons/vitoria.mp3'); 
     somFundo = loadSound('sons/fundo.mp3');     
 
-    // IMAGENS (Carrega e ignora erros se os ficheiros ainda não existirem)
-    imgNuvem = loadImage('imagens/nuvem.png', () => {}, () => { console.log("A carregar fallback para Nuvem"); });
-    imgPassaro = loadImage('imagens/passaro.png', () => {}, () => { console.log("A carregar fallback para Passaro"); });
-    imgMeteoro = loadImage('imagens/meteoro.png', () => {}, () => { console.log("A carregar fallback para Meteoro"); });
-    imgGota = loadImage('imagens/gota_agua.png', () => {}, () => { console.log("A carregar fallback para Gota"); });
+    imgNuvem = loadImage('imagens/nuvem.png', () => {}, () => {});
+    imgPassaro = loadImage('imagens/passaro.png', () => {}, () => {});
+    imgMeteoro = loadImage('imagens/meteoro.png', () => {}, () => {});
+    imgGota = loadImage('imagens/gota_agua.png', () => {}, () => {});
 }
 
 function setup() {
     createCanvas(800, 500);
-    
-    // Inicia a escuta do microfone
     mic = new p5.AudioIn();
     mic.start();
     
+    jogador = new Nuvem();
     inicializarNivel(1);
     
-    // Volume ambiente mais baixo para não criar loop de feedback no microfone
     if (somFundo) somFundo.setVolume(0.3);
     
-    // -- TIPOGRAFIA GLOBAL
     textFont('sans-serif');
     textStyle(BOLD);
 }
 
-// O draw corre 60 vezes por segundo, gerindo qual ecrã está visível
 function draw() {
-    // -- Muda a cor do céu dinâmica consoante o nível atual
-    if (nivelAtual === 1) {
-        background(135, 206, 235); // Nível 1: Azul céu / Dia
-    } else if (nivelAtual === 2) {
-        background(253, 140, 80);  // Nível 2: Alaranjado / Pôr do sol
-    } else {
-        background(80, 90, 110);   // Nível 3: Escuro / Tempestade
-    }
+    if (nivelAtual === 1) background(135, 206, 235);
+    else if (nivelAtual === 2) background(253, 140, 80);
+    else background(80, 90, 110);
 
-    if (estado === 0) {
-        ecraInicio();
-    } else if (estado === 1) {
-        ecraCalibracao();
-    } else if (estado === 2) {
-        ecraJogo();
-    } else if (estado === 3) {
-        ecraVitoria();
-    } else if (estado === 4) {
-        ecraGameOver();
-    } else if (estado === 5) {
-        ecraNivelConcluido();
-    }
+    if (estado === 0) ecraInicio();
+    else if (estado === 1) ecraCalibracao();
+    else if (estado === 2) ecraJogo();
+    else if (estado === 3) ecraVitoria();
+    else if (estado === 4) ecraGameOver();
+    else if (estado === 5) ecraNivelConcluido();
 
-    desenharRodape(); // Mantém o nome e tema sempre visíveis
+    desenharRodape(); 
 }
 
-// Configura a quantidade e posição das covas consoante o nível
-function inicializarNivel(nivel) {
-    buracos = [];
-    obstaculos = [];
-    gotasAgua = [];
-    
-    // Nível 1 = 3 covas, Nível 2 = 5 covas, Nível 3 = 7 covas
-    let numBuracos = 3 + (nivel - 1) * 2; 
-    let espacamento = width / (numBuracos + 1);
+// =========================================================
+// CLASSES (REQUISITO 11 - Estruturas de Dados e POO)
+// =========================================================
 
-    // Distribui as covas uniformemente pelo eixo X
-    for (let i = 1; i <= numBuracos; i++) {
-        buracos.push({
-            x: i * espacamento,
-            crescimento: 0,
-            completa: false
-        });
+class Nuvem {
+    constructor() {
+        this.x = 400;
+        this.y = 150;
+        this.reservaAgua = 100;
+        this.pontuacao = 0;
     }
-}
 
-// -- ECRÃ 0: INÍCIO
-function ecraInicio() {
-    fill(255);
-    textAlign(CENTER);
-    textSize(32);
-    text("A NUVEM SEMEADEIRA", width / 2, height / 2 - 20);
-    textSize(18);
-    text("Clica para iniciar a calibração do microfone", width / 2, height / 2 + 20);
-}
+    mover() {
+        if (keyIsDown(LEFT_ARROW)) this.x -= 5;
+        if (keyIsDown(RIGHT_ARROW)) this.x += 5;
+        if (keyIsDown(UP_ARROW)) this.y -= 5;
+        if (keyIsDown(DOWN_ARROW)) this.y += 5;
+        this.x = constrain(this.x, 60, width - 60);
+        this.y = constrain(this.y, 60, height - 160);
+    }
 
-// -- ECRÃ 1: CALIBRAÇÃO (Define o ruído de fundo do ambiente)
-function ecraCalibracao() {
-    fill(0);
-    textAlign(CENTER);
-    textSize(20);
-    text("A calibrar o microfone...", width / 2, height / 2 - 20);
-    text("Por favor, mantém o silêncio durante 3 segundos.", width / 2, height / 2 + 20);
-
-    // Recolhe amostras de volume para calcular a média do ruído local
-    let v = mic.getLevel();
-    somaVolume += v;
-    amostras++;
-
-    if (millis() - inicioCalibracao >= 3000) {
-        let ruidoMedio = somaVolume / max(1, amostras);
-        limiteChuva = ruidoMedio + 0.08; // Aplica margem de segurança
-        tempoInicioJogo = millis(); 
-        estado = 2; 
+    desenhar() {
+        if (imgNuvem && imgNuvem.width > 0) {
+            tint(map(this.reservaAgua, 0, 100, 255, 120)); 
+            imageMode(CENTER);
+            image(imgNuvem, this.x, this.y, 110, 70);
+            noTint();
+        } else {
+            let corNuvem = map(this.reservaAgua, 0, 100, 255, 100);
+            fill(corNuvem); noStroke();
+            ellipse(this.x, this.y, 100, 40);
+            ellipse(this.x - 25, this.y - 15, 60, 60);
+            ellipse(this.x + 25, this.y - 15, 60, 60);
+            fill(0); ellipse(this.x - 15, this.y - 5, 6, 6); ellipse(this.x + 15, this.y - 5, 6, 6); 
+            noFill(); stroke(0); strokeWeight(2); arc(this.x, this.y + 5, 20, 10, 0, PI); noStroke();
+        }
         
-        // Inicia a banda sonora
-        if (somFundo && somFundo.isLoaded() && !somFundo.isPlaying()) {
-            somFundo.loop();
+        let larguraBarra = 60;
+        let preenchimento = map(this.reservaAgua, 0, 100, 0, larguraBarra);
+        fill(255, 255, 255, 150);
+        rect(this.x - larguraBarra / 2, this.y - 55, larguraBarra, 8, 4); 
+        fill(0, 150, 255);
+        rect(this.x - larguraBarra / 2, this.y - 55, preenchimento, 8, 4);
+    }
+
+    desenhaChuva() {
+        stroke(33, 150, 243); strokeWeight(2);
+        for(let i = 0; i < 6; i++) {
+            let gotaX = this.x + random(-40, 40);
+            let gotaY = this.y + random(20, 150);
+            line(gotaX, gotaY, gotaX, gotaY + 15);
+        }
+        noStroke();
+    }
+}
+
+class Buraco {
+    constructor(x) {
+        this.x = x;
+        this.y = height - 50;
+        this.crescimento = 0;
+        this.completa = false;
+    }
+
+    desenhar(larguraCova) {
+        fill(92, 58, 33); 
+        ellipse(this.x, this.y, larguraCova, 25); 
+        
+        if (this.crescimento > 0) {
+            let altura = map(this.crescimento, 0, 100, 0, 35);
+            let tamanhoFolhas = map(this.crescimento, 0, 100, 0, 35);
+            stroke(101, 67, 33); strokeWeight(4);
+            line(this.x, this.y, this.x, this.y - altura); 
+            noStroke();
+            fill(34, 139, 34);
+            circle(this.x, this.y - altura, tamanhoFolhas); 
         }
     }
 }
 
-// -- ECRÃ 2: MOTOR DE JOGO PRINCIPAL
+class Obstaculo {
+    constructor() {
+        this.tipo = random(["passaro", "meteoro"]);
+        let velBase = random(2, 3) + (nivelAtual - 1) * 2.2;
+        let origem = random(["direita", "esquerda", "topo"]);
+        
+        if (origem === "direita") { this.x = width + 30; this.y = random(50, 220); this.vx = -velBase; this.vy = random(-0.8, 0.8); } 
+        else if (origem === "esquerda") { this.x = -30; this.y = random(50, 220); this.vx = velBase; this.vy = random(-0.8, 0.8); } 
+        else { this.x = random(100, width - 100); this.y = -30; this.vx = random(-1.5, 1.5); this.vy = velBase; }
+    }
+
+    atualizar() {
+        if (estadoVento) {
+            let angulo = atan2(this.y - jogador.y, this.x - jogador.x);
+            this.x += cos(angulo) * 8;
+            this.y += sin(angulo) * 8;
+        } else {
+            this.x += this.vx;
+            this.y += this.vy;
+        }
+    }
+
+    desenhar() {
+        imageMode(CENTER);
+        if (this.tipo === "passaro") {
+            if (imgPassaro && imgPassaro.width > 0) {
+                push(); translate(this.x, this.y); if (this.vx > 0) scale(-1, 1); image(imgPassaro, 0, 0, 36, 36); pop();
+            } else {
+                fill(200, 50, 50); triangle(this.x, this.y, this.x + 18, this.y - 8, this.x + 18, this.y + 8);
+            }
+        } else {
+            if (imgMeteoro && imgMeteoro.width > 0) {
+                image(imgMeteoro, this.x, this.y, 42, 42);
+            } else {
+                fill(80, 0, 80); ellipse(this.x, this.y, 45, 25); ellipse(this.x - 12, this.y - 8, 30, 30); ellipse(this.x + 12, this.y - 8, 30, 30);
+            }
+        }
+    }
+}
+
+class GotaAgua {
+    constructor() {
+        this.x = random(50, width - 50);
+        this.y = -10;
+        this.vel = random(1.5, 3);
+    }
+
+    atualizar() {
+        this.y += this.vel;
+    }
+
+    desenhar() {
+        if (imgGota && imgGota.width > 0) {
+            imageMode(CENTER); image(imgGota, this.x, this.y, 20, 26);
+        } else {
+            fill(0, 191, 255); noStroke(); ellipse(this.x, this.y, 14, 20);
+        }
+    }
+}
+
+// =========================================================
+// LÓGICA DE JOGO E ECRÃS
+// =========================================================
+
+function inicializarNivel(nivel) {
+    buracos = []; obstaculos = []; gotasAgua = [];
+    let numBuracos = 3 + (nivel - 1) * 2; 
+    let espacamento = width / (numBuracos + 1);
+    for (let i = 1; i <= numBuracos; i++) {
+        buracos.push(new Buraco(i * espacamento));
+    }
+}
+
+function ecraInicio() {
+    push(); // Guarda as configurações de estilo para não afetar o resto do jogo
+    
+    // -- Caixa de fundo escurecida (ajuda imenso a ler o texto)
+    fill(0, 0, 0, 120);
+    noStroke();
+    rectMode(CENTER);
+    rect(width / 2, height / 2 - 10, 680, 330, 20); // Caixa com cantos arredondados
+    
+    // -- Título com efeito de sombra
+    textAlign(CENTER, CENTER);
+    textSize(38);
+    fill(0, 150); 
+    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2 + 3, 93); // Sombra
+    fill(255); 
+    text("☁️ A NUVEM SEMEADEIRA ☁️", width/2, 90); // Título branco
+
+    // -- Objetivo (destacado a verde claro)
+    textSize(18);
+    fill(150, 255, 150); 
+    text("🎯 Objetivo: Faz crescer todas as árvores antes que a água acabe.", width/2, 155);
+
+    // -- Instruções / Controlos
+    fill(255);
+    textSize(18);
+    text("🎮 Setas do Teclado: Movem a nuvem", width/2, 210);
+    text("🌧️ Som constante (Mic): Faz chover (gasta água)", width/2, 245);
+    text("💨 Sopro forte (Mic): Vento que afasta pássaros e meteoros", width/2, 280);
+    
+    // -- Dica extra (destacada a azul claro)
+    fill(135, 206, 250); 
+    text("💧 Gotas azuis: Apanha-as para recarregar a tua reserva", width/2, 320);
+
+    // -- Mensagem de Start (pisca suavemente usando a função sin e millis)
+    let alphaPiscar = map(sin(millis() / 250), -1, 1, 100, 255);
+    fill(255, 215, 0, alphaPiscar); // Amarelo dourado a piscar
+    textSize(22);
+    text("✨ Prime [ ESPAÇO ] para calibrar o microfone ✨", width/2, 385);
+    
+    pop(); // Restaura as configurações normais
+}
+
+function ecraCalibracao() {
+    fill(0); textAlign(CENTER); textSize(20);
+    text("A calibrar o microfone...", width / 2, height / 2 - 20);
+    text("Por favor, mantém o silêncio durante 3 segundos.", width / 2, height / 2 + 20);
+
+    let v = mic.getLevel();
+    somaVolume += v; amostras++;
+
+    if (millis() - inicioCalibracao >= 3000) {
+        limiteChuva = (somaVolume / max(1, amostras)) + 0.08; 
+        tempoInicioJogo = millis(); 
+        estado = 2; 
+        if (somFundo && somFundo.isLoaded() && !somFundo.isPlaying()) somFundo.loop();
+    }
+}
+
 function ecraJogo() {
     desenhaCenario();
-
-    // Converte os milissegundos em segundos inteiros
     tempoDecorridoSegundos = floor((millis() - tempoInicioJogo) / 1000);
-
     let vol = mic.getLevel();
 
-    // Lógica de Histerese: Evita flutuações rápidas ativando/desativando estados com margens diferentes
-    if (vol > limiteVento) {
+    // Histerese corrigida do Vento e da Chuva
+    if (vol > limiteVentoOn) {
         estadoVento = true;
         estadoChuva = false;
-    } else if (!estadoChuva && vol > limiteChuva) {
-        estadoChuva = true;
-        estadoVento = false;
-    } else if (estadoChuva && vol < limiteChuva - 0.02) {
-        estadoChuva = false;
-        estadoVento = false;
-    } else {
+    } else if (estadoVento && vol < limiteVentoOff) {
         estadoVento = false;
     }
 
-    // Se a chuva está ativa, gasta água e tenta germinar as árvores
-    if (estadoChuva && reservaAgua > 0) {
-        reservaAgua -= 0.12;
-        desenhaChuva();
+    if (!estadoVento) {
+        if (!estadoChuva && vol > limiteChuva) estadoChuva = true;
+        else if (estadoChuva && vol < limiteChuva - 0.02) estadoChuva = false;
+    } else {
+        estadoChuva = false; 
+    }
+
+    if (estadoChuva && jogador.reservaAgua > 0) {
+        jogador.reservaAgua -= 0.12;
+        jogador.desenhaChuva();
         
-        // Ajusta a largura de deteção consoante a quantidade de buracos
         let raioAlcance = map(buracos.length, 3, 7, 45, 25);
-        for (let i = 0; i < buracos.length; i++) {
-            // Verifica se a nuvem está alinhada verticalmente com a cova
-            if (abs(nuvemX - buracos[i].x) < raioAlcance && !buracos[i].completa) {
-                buracos[i].crescimento += 0.5;
-                
-                // Conclui o crescimento e premeia o jogador
-                if (buracos[i].crescimento >= 100) {
-                    buracos[i].completa = true;
-                    pontuacao += 10;
+        for (let b of buracos) {
+            if (abs(jogador.x - b.x) < raioAlcance && !b.completa) {
+                b.crescimento += 0.5;
+                if (b.crescimento >= 100) {
+                    b.completa = true;
+                    jogador.pontuacao += 10;
                     if (somArvore && somArvore.isLoaded()) somArvore.play();
                 }
             }
         }
     }
 
-    // Condição de Derrota
-    if (reservaAgua <= 0 && estado === 2) {
+    if (jogador.reservaAgua <= 0 && estado === 2) {
         estado = 4;
         if (somFundo && somFundo.isPlaying()) somFundo.stop(); 
         if (somFim && somFim.isLoaded()) somFim.play(); 
     }
 
-    // Leitura do teclado para movimento (setas direcionais)
-    if (keyIsDown(LEFT_ARROW)) nuvemX -= 5;
-    if (keyIsDown(RIGHT_ARROW)) nuvemX += 5;
-    if (keyIsDown(UP_ARROW)) nuvemY -= 5;
-    if (keyIsDown(DOWN_ARROW)) nuvemY += 5;
-
-    // Impede que a nuvem saia dos limites do ecrã
-    nuvemX = constrain(nuvemX, 60, width - 60);
-    nuvemY = constrain(nuvemY, 60, height - 160);
-
-    // Atualiza lógica das entidades em movimento
-    gerarObstaculos();
-    atualizarObstaculos();
-    gerarGotasAgua();
-    atualizarGotasAgua();
-
+    jogador.mover();
+    gerarAtualizarEntidades();
     verificarProgressoNivel();
-
-    desenhaNuvem();
+    jogador.desenhar();
     desenharHUD();
 }
 
-// -- ECRÃS DE TRANSIÇÃO E FINALIZAÇÃO
-function ecraNivelConcluido() {
-    fill(0, 100, 0);
-    textAlign(CENTER);
-    textSize(32);
-    text("NÍVEL " + nivelAtual + " CONCLUÍDO!", width / 2, height / 2 - 40);
-    fill(0);
-    textSize(20);
-    text("Pontuação Atual: " + pontuacao + " pts", width / 2, height / 2);
-    text("Tempo acumulado: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
-    fill(50);
-    textSize(16);
-    text("Clica no ecrã para avançar para o Nível " + (nivelAtual + 1), width / 2, height / 2 + 75);
-}
-
-function ecraVitoria() {
-    fill(0, 128, 0);
-    textAlign(CENTER);
-    textSize(32);
-    text("PARABÉNS! JOGO CONCLUÍDO", width / 2, height / 2 - 40);
-    fill(0);
-    textSize(22);
-    text("Pontuação Final: " + pontuacao + " pts", width / 2, height / 2);
-    text("Tempo Total: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
-    textSize(16);
-    text("Clica para jogar novamente", width / 2, height / 2 + 75);
-}
-
-function ecraGameOver() {
-    fill(200, 0, 0);
-    textAlign(CENTER);
-    textSize(36);
-    text("GAME OVER", width / 2, height / 2 - 40);
-    fill(0);
-    textSize(20);
-    text("A tua reserva de água esgotou-se!", width / 2, height / 2);
-    text("Tempo de jogo: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
-    textSize(16);
-    text("Clica para tentar novamente", width / 2, height / 2 + 75);
-}
-
-// Converte os segundos para o formato visual "MM:SS"
-function formatarTempo(segundosTotais) {
-    let minutos = floor(segundosTotais / 60);
-    let segundos = segundosTotais % 60;
-    let minStr = minutos < 10 ? "0" + minutos : minutos;
-    let segStr = segundos < 10 ? "0" + segundos : segundos;
-    return minStr + ":" + segStr;
-}
-
-// -- LÓGICA DAS GOTAS EXTRA (RECARGA DE ÁGUA)
-function gerarGotasAgua() {
-    if (millis() - tempoUltimaGota > 3500) { // Gera uma gota a cada 3.5 segundos
-        gotasAgua.push({
-            x: random(50, width - 50),
-            y: -10,
-            vel: random(1.5, 3)
-        });
-        tempoUltimaGota = millis();
-    }
-}
-
-function atualizarGotasAgua() {
-    for (let i = gotasAgua.length - 1; i >= 0; i--) {
-        let g = gotasAgua[i];
-        g.y += g.vel; // Aplica gravidade
-
-        // Tenta usar a imagem da Gota PNG. Se falhar, usa a elipse original.
-        if (imgGota && imgGota.width > 0) {
-            imageMode(CENTER);
-            image(imgGota, g.x, g.y, 20, 26);
-        } else {
-            fill(0, 191, 255);
-            noStroke();
-            ellipse(g.x, g.y, 14, 20);
-        }
-
-        // Verifica colisão da gota com a nuvem (raio de 45px)
-        let d = dist(nuvemX, nuvemY, g.x, g.y);
-        if (d < 45) {
-            reservaAgua = min(100, reservaAgua + 20); // Recarrega água (máx 100%)
-            if (somGota && somGota.isLoaded()) somGota.play();
-            gotasAgua.splice(i, 1); // Remove a gota após recolha
-            continue;
-        }
-
-        // Remove a gota se atingir o chão
-        if (g.y > height - 100) {
-            gotasAgua.splice(i, 1);
-        }
-    }
-}
-
-// -- LÓGICA DOS OBSTÁCULOS E DIFICULDADE
-function gerarObstaculos() {
-    // Reduz o tempo de respawn consoante o nível (aumenta dificuldade)
-    let intervaloRespawn = map(nivelAtual, 1, 3, 3000, 800);
-
-    if (millis() - tempoUltimoObstaculo > intervaloRespawn) {
-        // No nível 3 podem aparecer 2 obstáculos em simultâneo
-        let qtdObstaculos = (nivelAtual === 3 && random() < 0.4) ? 2 : 1;
-
-        for (let k = 0; k < qtdObstaculos; k++) {
-            let tipoObs = random(["passaro", "meteoro"]); // Alterado para pássaro e meteoro
-            let velBase = random(2, 3) + (nivelAtual - 1) * 2.2;
-            
-            // Sorteia o local de origem do obstáculo
-            let origens = ["direita", "esquerda", "topo"];
-            let origem = random(origens);
-            let ox, oy, vx, vy;
-
-            // Define os vetores de velocidade (vx, vy) consoante a origem
-            if (origem === "direita") {
-                ox = width + 30; oy = random(50, 220); vx = -velBase; vy = random(-0.8, 0.8);
-            } else if (origem === "esquerda") {
-                ox = -30; oy = random(50, 220); vx = velBase; vy = random(-0.8, 0.8);
-            } else {
-                ox = random(100, width - 100); oy = -30; vx = random(-1.5, 1.5); vy = velBase;
-            }
-
-            obstaculos.push({ x: ox, y: oy, vx: vx, vy: vy, tipo: tipoObs });
-        }
+function gerarAtualizarEntidades() {
+    // Obstáculos
+    if (millis() - tempoUltimoObstaculo > map(nivelAtual, 1, 3, 3000, 800)) {
+        let qtd = (nivelAtual === 3 && random() < 0.4) ? 2 : 1;
+        for (let k = 0; k < qtd; k++) obstaculos.push(new Obstaculo());
         tempoUltimoObstaculo = millis();
     }
-}
-
-function atualizarObstaculos() {
+    
     for (let i = obstaculos.length - 1; i >= 0; i--) {
         let obs = obstaculos[i];
-
-        // Se o vento está ativo, afasta o obstáculo radialmente usando trigonometria
-        if (estadoVento) {
-            let angulo = atan2(obs.y - nuvemY, obs.x - nuvemX);
-            obs.x += cos(angulo) * 8;
-            obs.y += sin(angulo) * 8;
-        } else {
-            obs.x += obs.vx;
-            obs.y += obs.vy;
-        }
-
-        imageMode(CENTER);
-
-        // -- DESENHO DE OBSTÁCULOS (COM FALLBACK)
-        if (obs.tipo === "passaro") {
-            if (imgPassaro && imgPassaro.width > 0) {
-                // Inverte a imagem conforme a direção do pássaro
-                push();
-                translate(obs.x, obs.y);
-                if (obs.vx > 0) scale(-1, 1); // Olha para a direita
-                image(imgPassaro, 0, 0, 36, 36);
-                pop();
-            } else {
-                // Fallback do triângulo vermelho
-                fill(200, 50, 50);
-                triangle(obs.x, obs.y, obs.x + 18, obs.y - 8, obs.x + 18, obs.y + 8);
-            }
-        } else { // Meteoro
-            if (imgMeteoro && imgMeteoro.width > 0) {
-                image(imgMeteoro, obs.x, obs.y, 42, 42);
-            } else {
-                // Fallback fofo roxo para o meteoro/gás antigo
-                fill(80, 0, 80);
-                ellipse(obs.x, obs.y, 45, 25);
-                ellipse(obs.x - 12, obs.y - 8, 30, 30);
-                ellipse(obs.x + 12, obs.y - 8, 30, 30);
-            }
-        }
-
-        // Verifica colisão com o jogador e aplica penalizações
-        let d = dist(nuvemX, nuvemY, obs.x, obs.y);
-        if (d < 45) {
-            reservaAgua = max(0, reservaAgua - 15);
-            pontuacao = max(0, pontuacao - 5);
+        obs.atualizar();
+        obs.desenhar();
+        
+        if (dist(jogador.x, jogador.y, obs.x, obs.y) < 45) {
+            jogador.reservaAgua = max(0, jogador.reservaAgua - 15);
+            jogador.pontuacao = max(0, jogador.pontuacao - 5);
             if (somDano && somDano.isLoaded()) somDano.play();
             obstaculos.splice(i, 1);
             continue;
         }
+        if (obs.x < -60 || obs.x > width + 60 || obs.y < -60 || obs.y > height - 80) obstaculos.splice(i, 1);
+    }
 
-        // Limpeza de memória: remove obstáculos que já saíram do ecrã
-        if (obs.x < -60 || obs.x > width + 60 || obs.y < -60 || obs.y > height - 80) {
-            obstaculos.splice(i, 1);
+    // Gotas
+    if (millis() - tempoUltimaGota > 3500) {
+        gotasAgua.push(new GotaAgua());
+        tempoUltimaGota = millis();
+    }
+    
+    for (let i = gotasAgua.length - 1; i >= 0; i--) {
+        let g = gotasAgua[i];
+        g.atualizar();
+        g.desenhar();
+        if (dist(jogador.x, jogador.y, g.x, g.y) < 45) {
+            jogador.reservaAgua = min(100, jogador.reservaAgua + 20); 
+            if (somGota && somGota.isLoaded()) somGota.play();
+            gotasAgua.splice(i, 1);
+            continue;
         }
+        if (g.y > height - 100) gotasAgua.splice(i, 1);
     }
 }
 
-// Analisa se todas as árvores do nível atual atingiram os 100%
-function verificarProgressoNivel() {
-    let todasCompletas = buracos.every(b => b.completa);
+function desenhaCenario() {
+    noStroke(); fill(139, 69, 19); rect(0, height - 100, width, 100); 
+    fill(34, 139, 34); rect(0, height - 100, width, 10); 
+    let larguraBuraco = map(buracos.length, 3, 7, 80, 45);
+    for (let b of buracos) b.desenhar(larguraBuraco);
+}
 
-    if (todasCompletas && estado === 2) {
+function verificarProgressoNivel() {
+    if (buracos.every(b => b.completa) && estado === 2) {
         if (nivelAtual < 3) {
-            estado = 5; // Pausa no ecrã de transição
+            estado = 5; 
+            tempoPausaIniciado = millis(); // Guarda o tempo em que parou
             if (somNivel && somNivel.isLoaded()) somNivel.play();
         } else {
-            estado = 3; // Vitória Final
+            estado = 3; 
             if (somFundo && somFundo.isPlaying()) somFundo.stop(); 
             if (somVitoria && somVitoria.isLoaded()) somVitoria.play(); 
         }
     }
 }
 
-// -- DESENHO VISUAL DO CENÁRIO E INTERFACE
-function desenhaCenario() {
-    noStroke();
-    fill(139, 69, 19); 
-    rect(0, height - 100, width, 100); // Chão de terra
-    
-    // -- Linha de relva no topo da terra
-    fill(34, 139, 34); 
-    rect(0, height - 100, width, 10); 
-
-    // A largura da cova encolhe se houver mais buracos no nível
-    let larguraBuraco = map(buracos.length, 3, 7, 80, 45);
-
-    for (let i = 0; i < buracos.length; i++) {
-        let bx = buracos[i].x;
-        let by = height - 50;
-
-        fill(92, 58, 33); 
-        ellipse(bx, by, larguraBuraco, 25); // Cova escura
-        
-        // Desenha a árvore de forma proporcional ao seu crescimento
-        if (buracos[i].crescimento > 0) {
-            let altura = map(buracos[i].crescimento, 0, 100, 0, 35);
-            let tamanhoFolhas = map(buracos[i].crescimento, 0, 100, 0, 35);
-            
-            stroke(101, 67, 33);
-            strokeWeight(4);
-            line(bx, by, bx, by - altura); // Tronco
-            noStroke();
-            
-            fill(34, 139, 34);
-            circle(bx, by - altura, tamanhoFolhas); // Folhagem
-        }
-    }
+function ecraNivelConcluido() {
+    fill(0, 100, 0); textAlign(CENTER); textSize(32); text("NÍVEL " + nivelAtual + " CONCLUÍDO!", width / 2, height / 2 - 40);
+    fill(0); textSize(20); text("Pontuação Atual: " + jogador.pontuacao + " pts", width / 2, height / 2);
+    text("Tempo acumulado: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    fill(50); textSize(16); text("Prime ESPAÇO para avançar para o Nível " + (nivelAtual + 1), width / 2, height / 2 + 75);
 }
 
-function desenhaNuvem() {
-    // Se a imagem da nuvem existir e carregar, desenha a imagem.
-    // Se não, faz a nuvem com elipses.
-    if (imgNuvem && imgNuvem.width > 0) {
-        // Aplica o mesmo tom escurecido do fallback se quiseres, mas idealmente usa só o sprite
-        tint(map(reservaAgua, 0, 100, 255, 120)); // Escurece a imagem quando perde água
-        imageMode(CENTER);
-        image(imgNuvem, nuvemX, nuvemY, 110, 70);
-        noTint(); // Reseta tint para não influenciar outras imagens
-    } else {
-        let corNuvem = map(reservaAgua, 0, 100, 255, 100);
-        fill(corNuvem);
-        noStroke();
-        
-        ellipse(nuvemX, nuvemY, 100, 40);
-        ellipse(nuvemX - 25, nuvemY - 15, 60, 60);
-        ellipse(nuvemX + 25, nuvemY - 15, 60, 60);
-
-        fill(0);
-        ellipse(nuvemX - 15, nuvemY - 5, 6, 6); 
-        ellipse(nuvemX + 15, nuvemY - 5, 6, 6); 
-        noFill();
-        stroke(0);
-        strokeWeight(2);
-        arc(nuvemX, nuvemY + 5, 20, 10, 0, PI); 
-        noStroke();
-    }
-    
-    // -- Barra de água dinâmica (Puxada mais para cima: nuvemY - 55)
-    let larguraBarra = 60;
-    let alturaBarra = 8;
-    let preenchimento = map(reservaAgua, 0, 100, 0, larguraBarra);
-
-    // Fundo da barra (branco semitransparente)
-    fill(255, 255, 255, 150);
-    rect(nuvemX - larguraBarra / 2, nuvemY - 55, larguraBarra, alturaBarra, 4); 
-
-    // Preenchimento azul
-    fill(0, 150, 255);
-    rect(nuvemX - larguraBarra / 2, nuvemY - 55, preenchimento, alturaBarra, 4);
+function ecraVitoria() {
+    fill(0, 128, 0); textAlign(CENTER); textSize(32); text("PARABÉNS! JOGO CONCLUÍDO", width / 2, height / 2 - 40);
+    fill(0); textSize(22); text("Pontuação Final: " + jogador.pontuacao + " pts", width / 2, height / 2);
+    text("Tempo Total: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    textSize(16); text("Prime ESPAÇO para jogar novamente", width / 2, height / 2 + 75);
 }
 
-function desenhaChuva() {
-    stroke(33, 150, 243); 
-    strokeWeight(2);
-    // Gera 6 traços visuais para simular as gotas de chuva
-    for(let i = 0; i < 6; i++) {
-        let gotaX = nuvemX + random(-40, 40);
-        let gotaY = nuvemY + random(20, 150);
-        line(gotaX, gotaY, gotaX, gotaY + 15);
-    }
-    noStroke();
+function ecraGameOver() {
+    fill(200, 0, 0); textAlign(CENTER); textSize(36); text("GAME OVER", width / 2, height / 2 - 40);
+    fill(0); textSize(20); text("A tua reserva de água esgotou-se!", width / 2, height / 2);
+    text("Tempo de jogo: " + formatarTempo(tempoDecorridoSegundos), width / 2, height / 2 + 30);
+    textSize(16); text("Prime ESPAÇO para tentar novamente", width / 2, height / 2 + 75);
+}
+
+function formatarTempo(sTotais) {
+    let min = floor(sTotais / 60); let seg = sTotais % 60;
+    return (min < 10 ? "0" + min : min) + ":" + (seg < 10 ? "0" + seg : seg);
 }
 
 function desenharHUD() {
-    // -- Barra de fundo semitransparente para o HUD
-    fill(255, 255, 255, 120);
-    noStroke();
-    rect(0, 0, width, 45);
+    fill(255, 255, 255, 120); noStroke(); rect(0, 0, width, 45);
+    fill(0); textSize(18);
+    textAlign(LEFT, CENTER); text("Pontuação: " + jogador.pontuacao, 20, 22);
+    textAlign(CENTER, CENTER); text("Nível: " + nivelAtual + " / 3", width / 2, 22);
+    textAlign(RIGHT, CENTER); text("Tempo: " + formatarTempo(tempoDecorridoSegundos), width - 20, 22);
 
-    fill(0);
-    textSize(18);
-    
-    // -- Pontuação alinhada à esquerda
-    textAlign(LEFT, CENTER);
-    text("Pontuação: " + pontuacao, 20, 22);
-    
-    // -- Nível alinhado ao centro
-    textAlign(CENTER, CENTER);
-    text("Nível: " + nivelAtual + " / 3", width / 2, 22);
-    
-    // -- Tempo alinhado à direita
-    textAlign(RIGHT, CENTER);
-    text("Tempo: " + formatarTempo(tempoDecorridoSegundos), width - 20, 22);
-
-    // -- Alerta de Vento 
-    if (estadoVento) {
-        fill(255, 69, 0);
-        textSize(20);
-        textAlign(CENTER, CENTER);
-        text("SOPRO DE VENTO ATIVO!", width / 2, 70);
-    }
-
-    // -- Adiciona a barra do microfone no lado direito
+    if (estadoVento) { fill(255, 69, 0); textSize(20); textAlign(CENTER, CENTER); text("SOPRO DE VENTO ATIVO!", width / 2, 70); }
     desenharBarraAudio();
 }
 
 function desenharBarraAudio() {
-    let barraLargura = 20; 
-    let barraAltura = 200; 
-    let barraX = width - barraLargura - 30; 
-    let barraY = 100;
+    let barraLargura = 20; let barraAltura = 200; 
+    let barraX = width - barraLargura - 30; let barraY = 100;
 
     let vol = mic.getLevel();
     let volVisual = map(constrain(vol, 0, 0.5), 0, 0.5, 0, barraAltura);
     let limiteChuvaVis = map(constrain(limiteChuva, 0, 0.5), 0, 0.5, 0, barraAltura);
-    let limiteVentoVis = map(constrain(limiteVento, 0, 0.5), 0, 0.5, 0, barraAltura);
+    let limiteVentoVis = map(constrain(limiteVentoOn, 0, 0.5), 0, 0.5, 0, barraAltura);
 
-    // Fundo da barra
-    fill(0, 0, 0, 50);
-    noStroke();
-    rect(barraX, barraY, barraLargura, barraAltura, 5);
-
-    // Preenchimento do volume (Muda de colos conforme a ação)
-    if (estadoVento) fill(255, 69, 0); 
-    else if (estadoChuva) fill(33, 150, 243); 
-    else fill(100, 200, 100); 
-
-    // Desenha a barra de baixo para cima
+    fill(0, 0, 0, 50); noStroke(); rect(barraX, barraY, barraLargura, barraAltura, 5);
+    if (estadoVento) fill(255, 69, 0); else if (estadoChuva) fill(33, 150, 243); else fill(100, 200, 100); 
     rect(barraX, barraY + barraAltura - volVisual, barraLargura, volVisual, 5);
 
-    // Linha de gatilho da Chuva
-    stroke(33, 150, 243);
-    strokeWeight(2);
-    line(barraX - 5, barraY + barraAltura - limiteChuvaVis, barraX + barraLargura + 5, barraY + barraAltura - limiteChuvaVis);
-
-    // Linha de gatilho do Vento
-    stroke(255, 69, 0);
-    line(barraX - 5, barraY + barraAltura - limiteVentoVis, barraX + barraLargura + 5, barraY + barraAltura - limiteVentoVis);
+    stroke(33, 150, 243); strokeWeight(2); line(barraX - 5, barraY + barraAltura - limiteChuvaVis, barraX + barraLargura + 5, barraY + barraAltura - limiteChuvaVis);
+    stroke(255, 69, 0); line(barraX - 5, barraY + barraAltura - limiteVentoVis, barraX + barraLargura + 5, barraY + barraAltura - limiteVentoVis);
     noStroke();
 
-    // Textos das linhas 
-    fill(0);
-    textSize(12);
-    textAlign(RIGHT, CENTER);
+    fill(0); textSize(12); textAlign(RIGHT, CENTER);
     text("Vento", barraX - 8, barraY + barraAltura - limiteVentoVis);
     text("Chuva", barraX - 8, barraY + barraAltura - limiteChuvaVis);
-    
-    textAlign(CENTER, BOTTOM);
-    text("Mic", barraX + barraLargura / 2, barraY - 10);
+    textAlign(CENTER, BOTTOM); text("Mic", barraX + barraLargura / 2, barraY - 10);
 }
 
 function desenharRodape() {
-    fill(0);
-    textSize(12);
-    textAlign(LEFT, BOTTOM);
-    text("Reforestation of a degraded area", 10, height - 10);
-    textAlign(RIGHT, BOTTOM);
-    text("Rodrigo Vieira - 33445 - ECGM", width - 10, height - 10);
+    fill(0); textSize(12); textAlign(LEFT, BOTTOM); text("Reforestation of a degraded area", 10, height - 10);
+    textAlign(RIGHT, BOTTOM); text("Rodrigo Vieira - 33445 - ECGM", width - 10, height - 10);
 }
 
-// -- GESTÃO DE CLIQUES E FLUXO DE ECRÃS
-function mousePressed() {
-    // Obrigatório nos browsers modernos para iniciar a placa de som
+// =========================================================
+// NOVO CONTROLO: APENAS TECLADO (REQUISITO 5)
+// =========================================================
+function keyPressed() {
+    if (key !== ' ') return; // Só avança se a tecla for o ESPAÇO
+
     userStartAudio(); 
 
-    // Arranque inicial
     if (estado === 0) {
         inicioCalibracao = millis();
-        somaVolume = 0;
-        amostras = 0;
-        estado = 1; 
-    
-    // Avançar de nível a partir do ecrã de transição
+        somaVolume = 0; amostras = 0; estado = 1; 
     } else if (estado === 5) {
         nivelAtual++;
-        reservaAgua = 100;
+        jogador.reservaAgua = 100;
         inicializarNivel(nivelAtual);
+        tempoInicioJogo += millis() - tempoPausaIniciado; // Desconta o tempo em que o jogo esteve parado no menu
         estado = 2;
-    
-    // Recomeçar um jogo totalmente novo após Game Over ou Vitória
     } else if (estado === 3 || estado === 4) {
         nivelAtual = 1;
-        reservaAgua = 100;
-        pontuacao = 0;
-        nuvemX = 400;
-        nuvemY = 150;
+        jogador.reservaAgua = 100;
+        jogador.pontuacao = 0;
+        jogador.x = 400; jogador.y = 150;
         inicializarNivel(1);
         tempoInicioJogo = millis();
         estado = 2;
-        
-        if (somFundo && somFundo.isLoaded() && !somFundo.isPlaying()) {
-            somFundo.loop();
-        }
+        if (somFundo && somFundo.isLoaded() && !somFundo.isPlaying()) somFundo.loop();
     }
 }
